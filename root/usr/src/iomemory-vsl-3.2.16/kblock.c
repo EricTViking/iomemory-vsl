@@ -41,6 +41,7 @@
 #include <fio/port/atomic_list.h>
 #include <linux/blk_types.h>
 #include <linux/bio.h>
+#include <linux/const.h>
 #include <linux/blk-mq.h>
 #include <linux/version.h>
 #include <linux/fs.h>
@@ -345,10 +346,24 @@ int kfio_create_disk(struct fio_device *dev, kfio_pci_dev_t *pdev, uint32_t sect
     blk_limits_io_min(&rq->limits, sector_size);
     blk_limits_io_opt(&rq->limits, fio_dev_optimal_blk_size);
     blk_queue_max_hw_sectors(rq, max_sectors_per_request);
-    blk_queue_max_segments(rq, max_sg_elements_per_request);
-    blk_queue_max_segment_size(rq, PAGE_SIZE);
-    blk_queue_logical_block_size(rq, sector_size);
 
+    /** 3 functions now depreciated in 6.10 Linux
+     * blk_queue_max_segments(rq, max_sg_elements_per_request);
+     * blk_queue_max_segment_size(rq, PAGE_SIZE);
+     * blk_queue_logical_block_size(rq, sector_size);
+    **/
+
+    /* Added to replace above 3 functions */
+    if ((max_sectors_per_request << 9) < PAGE_SIZE) {
+        max_sectors_per_request = 1 << (PAGE_SHIFT - 9);
+        printk(KERN_INFO "%s: set to minimum %d\n",
+                       __func__, max_sectors_per_request);
+    }
+
+    rq->limits.max_hw_sectors = max_sectors_per_request ;
+    rq->limits.max_segments =  !max_sg_elements_per_request ? 1 : max_sg_elements_per_request ;
+    rq->limits.max_segment_size = PAGE_SIZE ;
+    
     if (enable_discard)
     {
         // https://lore.kernel.org/linux-btrfs/20220409045043.23593-25-hch@lst.de/
